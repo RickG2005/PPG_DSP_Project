@@ -5,8 +5,9 @@ from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
 
 # ---------- CONFIG ----------
-RAW_PATH = "C:\Users\rick2\Documents\PPG Project\data\raw"
-PROCESSED_PATH = "C:\Users\rick2\Documents\PPG Project\data\processed"
+RAW_PATH = r"C:\Users\rick2\Documents\PPG Project\data\raw"
+PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
+
 FS = 100  # Sampling frequency (Hz) — same as ESP32 delay (10ms = 100Hz)
 
 
@@ -27,9 +28,22 @@ def bandpass_filter(signal, lowcut=0.5, highcut=8):
 def preprocess_ppg(file_name):
     # 1️. Read data
     file_path = os.path.join(RAW_PATH, file_name)
+
+    print("Looking for file at:", file_path)
+    if not os.path.exists(file_path):
+        print("❌ File not found — check RAW_PATH or filename!")
+        return
+    else:
+        print("✅ File found, reading CSV...")
+
+    
     df = pd.read_csv(file_path)
     df["time_s"] = df["timestamp_ms"] / 1000.0
     ir = df["ir"].values
+    
+
+    print(f"Loaded {len(df)} samples from {file_name}")
+    print(f"IR min: {df['ir'].min()}, max: {df['ir'].max()}, mean: {df['ir'].mean():.2f}")
 
     # 2️. Filter and normalize
     ir_filtered = bandpass_filter(ir)
@@ -48,18 +62,28 @@ def preprocess_ppg(file_name):
     print(f"Saved processed file: {out_file}")
 
     # 4. Plot
-    plt.figure(figsize=(10, 4))
-    plt.plot(df["time_s"], ir, label="Raw", alpha=0.6)
-    plt.plot(df["time_s"], ir_filtered, label="Filtered", linewidth=2)
-    plt.title("PPG Preprocessing")
-    plt.xlabel("Time (s)")
-    plt.ylabel("Amplitude")
-    plt.legend()
-    plt.tight_layout()
+    fig, ax1 = plt.subplots(figsize=(10, 4))
+
+    color = "tab:red"
+    ax1.set_xlabel("Time (s)")
+    ax1.set_ylabel("Raw IR", color=color)
+    ax1.plot(df["time_s"], ir, color=color, alpha=0.5, label="Raw IR")
+    ax1.tick_params(axis="y", labelcolor=color)
+
+    ax2 = ax1.twinx()  # second y-axis for filtered signal
+    color = "tab:blue"
+    ax2.set_ylabel("Filtered (normalized)", color=color)
+    ax2.plot(df["time_s"], ir_filtered, color=color, linewidth=2, label="Filtered")
+    ax2.tick_params(axis="y", labelcolor=color)
+
+    fig.tight_layout()
+    plt.title("PPG Preprocessing: Raw vs Filtered")
     plt.show()
+
 
 
 # ---------- RUN ----------
 if __name__ == "__main__":
     # Run on your first collected CSV file
-    preprocess_ppg("session1.csv")
+    preprocess_ppg("sample_ppg.csv")
+
