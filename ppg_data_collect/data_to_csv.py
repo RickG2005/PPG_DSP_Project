@@ -16,7 +16,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 output_file = os.path.join(OUTPUT_DIR, f"ppg_data_{timestamp}.csv")
 
-print(f"📡 Connecting to {PORT} at {BAUD_RATE} baud...")
+print(f"Connecting to {PORT} at {BAUD_RATE} baud...")
 ser = serial.Serial(PORT, BAUD_RATE, timeout=1)
 
 # Open file and begin logging
