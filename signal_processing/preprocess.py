@@ -10,7 +10,6 @@ RAW_PATH = r"C:\Users\rick2\Documents\PPG Project\data\raw"
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
 DEFAULT_FS = 100  # Default fallback sampling frequency
 
-
 # ---------- CLEAN RAW CSV ----------
 def load_and_clean_csv(file_path):
     clean_rows = []
@@ -33,7 +32,6 @@ def load_and_clean_csv(file_path):
     df = pd.DataFrame(clean_rows, columns=["timestamp_ms", "ir_value"])
     return df
 
-
 # ---------- FILTER ----------
 def butter_bandpass_filter(signal, lowcut, highcut, fs, order=2):
     nyquist = 0.5 * fs
@@ -42,6 +40,29 @@ def butter_bandpass_filter(signal, lowcut, highcut, fs, order=2):
     b, a = butter(order, [low, high], btype="band")
     return filtfilt(b, a, signal)
 
+# ---------- AUTO CALIBRATION ----------
+def auto_calibrate(signal):
+    """
+    Automatically scales and centers PPG data so that:
+    - Outliers are clipped
+    - Baseline drift is removed
+    - Amplitude is normalized to a stable range
+    """
+    # 1️⃣ Clip extreme outliers
+    lower, upper = np.percentile(signal, [1, 99])
+    signal = np.clip(signal, lower, upper)
+
+    # 2️⃣ Remove DC offset / baseline drift
+    baseline = np.median(signal)
+    signal_centered = signal - baseline
+
+    # 3️⃣ Normalize amplitude dynamically
+    std = np.std(signal_centered)
+    if std < 1e-6:
+        std = 1.0
+    signal_normalized = signal_centered / std
+
+    return signal_normalized
 
 # ---------- MAIN PREPROCESS ----------
 def preprocess_latest_csv():
@@ -65,25 +86,29 @@ def preprocess_latest_csv():
         estimated_fs = round(1 / np.mean(valid_diffs))
     else:
         estimated_fs = DEFAULT_FS
-
     print(f"🕒 Estimated Sampling Rate: {estimated_fs} Hz")
 
-    # 4️⃣ Normalize
-    ir_signal = (ir_signal - np.min(ir_signal)) / (np.max(ir_signal) - np.min(ir_signal))
+    # 4️⃣ Remove startup samples (sensor stabilization)
+    skip_samples = int(estimated_fs * 2)
+    if len(ir_signal) > skip_samples:
+        ir_signal = ir_signal[skip_samples:]
+        df = df.iloc[skip_samples:].reset_index(drop=True)
 
-    # 5️⃣ Adaptive Filter Settings
+    # 5️⃣ Auto-calibrate signal
+    ir_calibrated = auto_calibrate(ir_signal)
+
+    # 6️⃣ Adaptive Filter
     lowcut = 0.5
     highcut = 4.0 if estimated_fs >= 50 else min(estimated_fs / 4, 3.0)
-    order = 2 if len(ir_signal) < 500 else 3
+    order = 2 if len(ir_calibrated) < 500 else 3
+    filtered = butter_bandpass_filter(ir_calibrated, lowcut, highcut, fs=estimated_fs, order=order)
 
-    filtered = butter_bandpass_filter(ir_signal, lowcut, highcut, fs=estimated_fs, order=order)
-
-    # 6️⃣ Edge Trimming (reduce filtfilt boundary distortion)
+    # 7️⃣ Edge trimming
     trim = min(50, len(filtered) // 10)
-    trimmed_raw = ir_signal[trim:-trim]
+    trimmed_raw = ir_calibrated[trim:-trim]
     trimmed_filtered = filtered[trim:-trim]
 
-    # 7️⃣ Save processed version
+    # 8️⃣ Save processed version
     os.makedirs(PROCESSED_PATH, exist_ok=True)
     out_file = os.path.join(PROCESSED_PATH, os.path.basename(latest_file).replace(".csv", "_processed.csv"))
     df["ir_filtered"] = filtered
@@ -91,21 +116,17 @@ def preprocess_latest_csv():
     print(f"💾 Saved processed CSV: {out_file}")
     print(f"✅ Processed {len(df)} samples (trimmed view: {len(trimmed_filtered)})")
 
-    # 8️⃣ Plot (Clean vs Filtered only)
+    # 9️⃣ Plot (Calibrated vs Filtered)
     plt.figure(figsize=(12, 4))
-    raw_norm = (trimmed_raw - np.mean(trimmed_raw)) / np.std(trimmed_raw)
-    filt_norm = (trimmed_filtered - np.mean(trimmed_filtered)) / np.std(trimmed_filtered)
-
-    plt.plot(raw_norm, label="Raw IR (Normalized)", color='gray', alpha=0.6)
-    plt.plot(filt_norm, label="Filtered IR (Normalized)", color='blue', linewidth=1.5)
-    plt.title(f"Cleaned & Filtered PPG Signal: {os.path.basename(latest_file)}")
-    plt.xlabel("Samples (trimmed)")
-    plt.ylabel("Normalized Amplitude")
+    plt.plot(trimmed_raw, label="Auto-Calibrated IR", color='gray', alpha=0.6)
+    plt.plot(trimmed_filtered, label="Filtered IR", color='blue', linewidth=1.5)
+    plt.title(f"Auto-Calibrated & Filtered PPG: {os.path.basename(latest_file)}")
+    plt.xlabel("Samples")
+    plt.ylabel("Normalized IR Amplitude")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
-
 
 # ---------- RUN ----------
 if __name__ == "__main__":
