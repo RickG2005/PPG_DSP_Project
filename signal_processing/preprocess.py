@@ -2,88 +2,111 @@ import os
 import pandas as pd
 import numpy as np
 from scipy.signal import butter, filtfilt
+import re
 import matplotlib.pyplot as plt
 
 # ---------- CONFIG ----------
 RAW_PATH = r"C:\Users\rick2\Documents\PPG Project\data\raw"
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
+DEFAULT_FS = 100  # Default fallback sampling frequency
 
-FS = 100  # Sampling frequency (Hz) — same as ESP32 delay (10ms = 100Hz)
+
+# ---------- CLEAN RAW CSV ----------
+def load_and_clean_csv(file_path):
+    clean_rows = []
+    with open(file_path, "r") as f:
+        for line in f:
+            if not re.match(r"^\d+(\.\d+)?,\d+(\.\d+)?$", line.strip()):
+                continue
+            parts = line.strip().split(",")
+            if len(parts) == 2:
+                try:
+                    timestamp = float(parts[0])
+                    ir_value = float(parts[1])
+                    clean_rows.append((timestamp, ir_value))
+                except ValueError:
+                    continue
+
+    if not clean_rows:
+        raise ValueError(f"No valid data found in {file_path}")
+
+    df = pd.DataFrame(clean_rows, columns=["timestamp_ms", "ir_value"])
+    return df
 
 
 # ---------- FILTER ----------
-def butter_bandpass(lowcut, highcut, fs, order=3):
-    nyq = 0.5 * fs
-    low, high = lowcut / nyq, highcut / nyq
+def butter_bandpass_filter(signal, lowcut, highcut, fs, order=2):
+    nyquist = 0.5 * fs
+    low = lowcut / nyquist
+    high = highcut / nyquist
     b, a = butter(order, [low, high], btype="band")
-    return b, a
-
-
-def bandpass_filter(signal, lowcut=0.5, highcut=8):
-    b, a = butter_bandpass(lowcut, highcut, FS)
     return filtfilt(b, a, signal)
 
 
 # ---------- MAIN PREPROCESS ----------
-def preprocess_ppg(file_name):
-    # 1️. Read data
-    file_path = os.path.join(RAW_PATH, file_name)
-
-    print("Looking for file at:", file_path)
-    if not os.path.exists(file_path):
-        print("❌ File not found — check RAW_PATH or filename!")
+def preprocess_latest_csv():
+    # 1️⃣ Find latest CSV
+    csv_files = [f for f in os.listdir(RAW_PATH) if f.endswith(".csv")]
+    if not csv_files:
+        print("❌ No CSV files found in raw folder.")
         return
+
+    latest_file = max([os.path.join(RAW_PATH, f) for f in csv_files], key=os.path.getctime)
+    print(f"📁 Latest CSV detected: {os.path.basename(latest_file)}")
+
+    # 2️⃣ Load and clean
+    df = load_and_clean_csv(latest_file)
+    ir_signal = df["ir_value"].to_numpy()
+
+    # 3️⃣ Estimate Sampling Rate (auto-detect)
+    time_diff = np.diff(df["timestamp_ms"]) / 1000.0  # ms → s
+    valid_diffs = time_diff[time_diff < np.percentile(time_diff, 95)]  # remove outliers
+    if len(valid_diffs) > 0:
+        estimated_fs = round(1 / np.mean(valid_diffs))
     else:
-        print("✅ File found, reading CSV...")
+        estimated_fs = DEFAULT_FS
 
-    
-    df = pd.read_csv(file_path)
-    df["time_s"] = df["timestamp_ms"] / 1000.0
-    ir = df["ir"].values
-    
+    print(f"🕒 Estimated Sampling Rate: {estimated_fs} Hz")
 
-    print(f"Loaded {len(df)} samples from {file_name}")
-    print(f"IR min: {df['ir'].min()}, max: {df['ir'].max()}, mean: {df['ir'].mean():.2f}")
+    # 4️⃣ Normalize
+    ir_signal = (ir_signal - np.min(ir_signal)) / (np.max(ir_signal) - np.min(ir_signal))
 
-    # 2️. Filter and normalize
-    ir_filtered = bandpass_filter(ir)
-    ir_filtered = (ir_filtered - np.mean(ir_filtered)) / np.std(ir_filtered)
+    # 5️⃣ Adaptive Filter Settings
+    lowcut = 0.5
+    highcut = 4.0 if estimated_fs >= 50 else min(estimated_fs / 4, 3.0)
+    order = 2 if len(ir_signal) < 500 else 3
 
-    # 3️. Save
-    processed_df = pd.DataFrame({
-        "time_s": df["time_s"],
-        "ir_raw": ir,
-        "ir_filtered": ir_filtered
-    })
+    filtered = butter_bandpass_filter(ir_signal, lowcut, highcut, fs=estimated_fs, order=order)
 
+    # 6️⃣ Edge Trimming (reduce filtfilt boundary distortion)
+    trim = min(50, len(filtered) // 10)
+    trimmed_raw = ir_signal[trim:-trim]
+    trimmed_filtered = filtered[trim:-trim]
+
+    # 7️⃣ Save processed version
     os.makedirs(PROCESSED_PATH, exist_ok=True)
-    out_file = os.path.join(PROCESSED_PATH, file_name.replace(".csv", "_processed.csv"))
-    processed_df.to_csv(out_file, index=False)
-    print(f"Saved processed file: {out_file}")
+    out_file = os.path.join(PROCESSED_PATH, os.path.basename(latest_file).replace(".csv", "_processed.csv"))
+    df["ir_filtered"] = filtered
+    df.to_csv(out_file, index=False)
+    print(f"💾 Saved processed CSV: {out_file}")
+    print(f"✅ Processed {len(df)} samples (trimmed view: {len(trimmed_filtered)})")
 
-    # 4. Plot
-    fig, ax1 = plt.subplots(figsize=(10, 4))
+    # 8️⃣ Plot (Clean vs Filtered only)
+    plt.figure(figsize=(12, 4))
+    raw_norm = (trimmed_raw - np.mean(trimmed_raw)) / np.std(trimmed_raw)
+    filt_norm = (trimmed_filtered - np.mean(trimmed_filtered)) / np.std(trimmed_filtered)
 
-    color = "tab:red"
-    ax1.set_xlabel("Time (s)")
-    ax1.set_ylabel("Raw IR", color=color)
-    ax1.plot(df["time_s"], ir, color=color, alpha=0.5, label="Raw IR")
-    ax1.tick_params(axis="y", labelcolor=color)
-
-    ax2 = ax1.twinx()  # second y-axis for filtered signal
-    color = "tab:blue"
-    ax2.set_ylabel("Filtered (normalized)", color=color)
-    ax2.plot(df["time_s"], ir_filtered, color=color, linewidth=2, label="Filtered")
-    ax2.tick_params(axis="y", labelcolor=color)
-
-    fig.tight_layout()
-    plt.title("PPG Preprocessing: Raw vs Filtered")
+    plt.plot(raw_norm, label="Raw IR (Normalized)", color='gray', alpha=0.6)
+    plt.plot(filt_norm, label="Filtered IR (Normalized)", color='blue', linewidth=1.5)
+    plt.title(f"Cleaned & Filtered PPG Signal: {os.path.basename(latest_file)}")
+    plt.xlabel("Samples (trimmed)")
+    plt.ylabel("Normalized Amplitude")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
     plt.show()
-
 
 
 # ---------- RUN ----------
 if __name__ == "__main__":
-    # Run on your first collected CSV file
-    preprocess_ppg("sample_ppg.csv")
-
+    preprocess_latest_csv()

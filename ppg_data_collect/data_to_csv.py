@@ -6,7 +6,7 @@ from datetime import datetime
 # --- USER SETTINGS ---
 PORT = "COM5"          # 🔧 Replace with your ESP32's serial port (e.g., "COM3" on Windows, "/dev/ttyUSB0" on Linux)
 BAUD_RATE = 115200     # Must match Arduino Serial.begin(115200)
-OUTPUT_DIR = "C:\Users\rick2\Documents\PPG Project\data\raw"  # Save in data/raw relative to this script
+OUTPUT_DIR = r"C:\Users\rick2\Documents\PPG Project\data\raw"  # Save in data/raw relative to this script
 # ----------------------
 
 # Make sure the output directory exists
