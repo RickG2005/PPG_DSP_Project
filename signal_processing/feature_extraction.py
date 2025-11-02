@@ -1,73 +1,83 @@
 import os
 import numpy as np
 import pandas as pd
-from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
+
 
 # ---------------------- CONFIG ----------------------
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
 FEATURES_PATH = r"C:\Users\rick2\Documents\PPG Project\data\features"
 
 
-# ---------------------- BEAT DETECTION ----------------------
-def detect_beats(ppg, fs=100, plot=False):
-    ppg = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
-    ppg = ppg - np.mean(ppg)
-
-    min_distance = int(0.4 * fs)
-    prominence = 0.3 * np.std(ppg)
-    peaks, _ = find_peaks(ppg, distance=min_distance, prominence=prominence)
-    valleys, _ = find_peaks(-ppg, distance=min_distance, prominence=prominence / 2)
-
-    paired_feet = []
-    for p in peaks:
-        prior_feet = [v for v in valleys if v < p]
-        if prior_feet:
-            paired_feet.append(prior_feet[-1])
-    feet = np.array(paired_feet)
-
-    foot_times = np.array(feet) / fs
-    peak_times = np.array(peaks) / fs
-
-    if plot:
-        plt.figure(figsize=(12, 4))
-        plt.plot(ppg, color='black', linewidth=1.1, label="PPG (Normalized)")
-        plt.scatter(peaks, ppg[peaks], color='red', label='Peaks')
-        plt.scatter(feet, ppg[feet], color='blue', label='Feet')
-        plt.title("Detected Beats")
-        plt.xlabel("Samples")
-        plt.ylabel("Amplitude")
-        plt.legend()
-        plt.tight_layout()
-        plt.show()
-
-    return {
-        "foot_indices": feet.tolist(),
-        "peak_indices": peaks.tolist(),
-        "foot_times": foot_times.tolist(),
-        "peak_times": peak_times.tolist(),
-        "beats_count": len(peaks)
-    }
-
-
 # ---------------------- METADATA INPUT ----------------------
 def get_metadata():
-    print("\nEnter metadata for this recording:")
-    age = int(input("Age: "))
-    sex = input("Sex (M/F/Other): ").strip().upper()
-    weight = float(input("Weight (kg): "))
-    height = float(input("Height (cm): "))
+    print("\n📋 Enter participant metadata and lifestyle details:")
+    print("---------------------------------------------------")
 
+    # --- Basic Demographics ---
+    age = int(input("Age (in years): "))
+    sex = input("Sex (M/F/Other): ").strip().upper()
+    weight = float(input("Weight (in kg): "))
+    height = float(input("Height (in cm): "))
+
+    # --- Lifestyle & Health Descriptors ---
+    print("\n💤 Average sleep per night (in hours):")
+    print("   - Try to give your regular nightly average.")
+    sleep_hours = float(input("Hours of sleep: "))
+
+    print("\n🏃 Physical Activity Level:")
+    print("   - Sedentary: Little to no exercise (desk job, minimal movement)")
+    print("   - Moderate: Exercise 2–3 times/week or walk often")
+    print("   - Active: Regular workouts (4+ times/week, sports, gym)")
+    activity_level = input("Choose (Sedentary / Moderate / Active): ").strip().lower()
+
+    print("\n🩺 Immediate family diabetes history:")
+    print("   - Type 'yes' if parents or siblings have diabetes.")
+    family_diabetes = input("Immediate family has diabetes? (yes/no): ").strip().lower()
+
+    print("\n🚬 Smoking habit:")
+    print("   - Type 'yes' if you currently smoke or recently quit (<1 year).")
+    smoker = input("Do you smoke? (yes/no): ").strip().lower()
+
+    print("\n☕ Daily caffeine intake:")
+    print("   - none: 0 cups/day")
+    print("   - low: 1–2 cups (tea/coffee/energy drinks)")
+    print("   - moderate: 3–4 cups")
+    print("   - high: 5+ cups or energy drinks daily")
+    caffeine_intake = input("Caffeine intake (none / low / moderate / high): ").strip().lower()
+
+    # --- Derived Metrics ---
     bmi = round(weight / ((height / 100) ** 2), 2)
 
+    # Numeric encoding for easier modeling
+    activity_score = {
+        "sedentary": 1,
+        "moderate": 2,
+        "active": 3
+    }.get(activity_level, np.nan)
+
+    # --- Final Dictionary ---
     metadata = {
         "age": age,
         "sex": sex,
         "weight_kg": weight,
         "height_cm": height,
-        "bmi": bmi
+        "bmi": bmi,
+        "sleep_hours": sleep_hours,
+        "activity_level": activity_level,
+        "activity_score": activity_score,
+        "family_diabetes": family_diabetes,
+        "smoker": smoker,
+        "caffeine_intake": caffeine_intake
     }
+
+    print("\n✅ Recorded Metadata Summary:")
+    print("---------------------------------------------------")
+    for k, v in metadata.items():
+        print(f"  {k}: {v}")
+
     return metadata
+
 
 
 # ---------------------- FEATURE EXTRACTION ----------------------
@@ -79,26 +89,25 @@ def extract_ppg_features(ppg, fs, beats_info):
     peaks, feet = peaks[:min_len], feet[:min_len]
 
     if len(peaks) < 2:
-        print("Not enough peaks detected.")
+        print("⚠️ Not enough peaks detected.")
         return {}
 
-    # --- Core temporal features ---
+    # --- Temporal features ---
     ibi = np.diff(beats_info["peak_times"])
     heart_rate = 60 / ibi
     hrv = np.std(ibi) * 1000
 
-    # --- Normalize ---
+    # --- Normalize PPG ---
     ppg_norm = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
     amps = ppg_norm[peaks] - np.array([ppg_norm[f] for f in feet])
     rise_times = (peaks - feet) / fs
 
-    # --- Morphological & vascular features ---
+    # --- Morphological features ---
     sdr_values, pw50_values, auc_values, dt_ratios = [], [], [], []
     for i in range(len(peaks) - 1):
         start, peak, end = feet[i], peaks[i], feet[i + 1]
         segment = ppg_norm[start:end]
 
-        # systolic/diastolic ratio
         if len(segment) > 2:
             mid_point = np.argmax(segment)
             systolic = segment[mid_point]
@@ -106,16 +115,12 @@ def extract_ppg_features(ppg, fs, beats_info):
             if diastolic != 0:
                 sdr_values.append(systolic / abs(diastolic))
 
-        # Pulse width at half max
         half_max = (ppg_norm[peaks[i]] + ppg_norm[feet[i]]) / 2
         above_half = np.where(segment > half_max)[0]
         if len(above_half) > 1:
             pw50_values.append((above_half[-1] - above_half[0]) / fs)
 
-        # Area under curve (AUC)
         auc_values.append(np.trapz(segment, dx=1 / fs))
-
-        # Diastolic time ratio
         total_cycle = end - start
         diastolic_time = end - peak
         if total_cycle != 0:
@@ -124,26 +129,19 @@ def extract_ppg_features(ppg, fs, beats_info):
     perfusion_index = (np.mean(amps) / np.max(ppg_norm)) * 100
 
     features = {
-        # --- Time-domain ---
         "heart_rate_bpm": np.mean(heart_rate),
         "ibi_mean_s": np.mean(ibi),
         "ibi_std_s": np.std(ibi),
         "hrv_ms": hrv,
-
-        # --- Amplitude & morphology ---
         "amplitude_mean": np.mean(amps),
         "amplitude_std": np.std(amps),
         "rise_time_mean_s": np.mean(rise_times),
         "rise_time_std_s": np.std(rise_times),
-
-        # --- New vascular features ---
         "sdr_mean": np.mean(sdr_values) if sdr_values else np.nan,
         "pw50_mean_s": np.mean(pw50_values) if pw50_values else np.nan,
         "auc_mean": np.mean(auc_values) if auc_values else np.nan,
         "dt_ratio_mean": np.mean(dt_ratios) if dt_ratios else np.nan,
         "perfusion_index": perfusion_index,
-
-        # --- Metadata about recording ---
         "beats_detected": len(peaks),
         "recording_duration_s": len(ppg) / fs
     }
@@ -203,7 +201,7 @@ def get_latest_processed_file():
 
 
 # ---------------------- MAIN RUN FUNCTION ----------------------
-def run_feature_extraction(plot=False, save=True):
+def run_feature_extraction(beats_info, plot=False, save=True):
     latest_file = get_latest_processed_file()
     if latest_file is None:
         return
@@ -220,11 +218,9 @@ def run_feature_extraction(plot=False, save=True):
         return
 
     fs = 100
-    beats_info = detect_beats(ppg, fs, plot=plot)
     metadata = get_metadata()
     features = extract_ppg_features(ppg, fs, beats_info)
 
-    # Combine + sanity check
     result = {**metadata, **features}
     df_out = pd.DataFrame([result])
 
@@ -237,6 +233,7 @@ def run_feature_extraction(plot=False, save=True):
         print("\n✅ All extracted values look physiologically valid.")
 
     if save:
+        os.makedirs(FEATURES_PATH, exist_ok=True)
         out_path = os.path.join(
             FEATURES_PATH,
             os.path.basename(latest_file).replace("_processed.csv", "_features.csv")
@@ -250,4 +247,5 @@ def run_feature_extraction(plot=False, save=True):
 
 # ---------------------- MAIN ----------------------
 if __name__ == "__main__":
-    run_feature_extraction(plot=True)
+    print("⚙️ This script expects 'beats_info' to be passed from beat_detection.py")
+    print("Import and call run_feature_extraction(beats_info) from your main script.")
