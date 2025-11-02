@@ -11,19 +11,14 @@ FEATURES_PATH = r"C:\Users\rick2\Documents\PPG Project\data\features"
 
 # ---------------------- BEAT DETECTION ----------------------
 def detect_beats(ppg, fs=100, plot=False):
-    """Detect systolic peaks and foot points (valleys) in PPG signal."""
-
-    # Normalize signal
     ppg = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
     ppg = ppg - np.mean(ppg)
 
-    # Peak and valley detection
-    min_distance = int(0.4 * fs)  # ~150 BPM max
+    min_distance = int(0.4 * fs)
     prominence = 0.3 * np.std(ppg)
     peaks, _ = find_peaks(ppg, distance=min_distance, prominence=prominence)
     valleys, _ = find_peaks(-ppg, distance=min_distance, prominence=prominence / 2)
 
-    # Keep only valleys before peaks
     paired_feet = []
     for p in peaks:
         prior_feet = [v for v in valleys if v < p]
@@ -31,134 +26,39 @@ def detect_beats(ppg, fs=100, plot=False):
             paired_feet.append(prior_feet[-1])
     feet = np.array(paired_feet)
 
+    foot_times = np.array(feet) / fs
+    peak_times = np.array(peaks) / fs
+
     if plot:
         plt.figure(figsize=(12, 4))
         plt.plot(ppg, color='black', linewidth=1.1, label="PPG (Normalized)")
         plt.scatter(peaks, ppg[peaks], color='red', label='Peaks')
         plt.scatter(feet, ppg[feet], color='blue', label='Feet')
-        plt.title("Detected Beats (Feet & Peaks)")
+        plt.title("Detected Beats")
         plt.xlabel("Samples")
         plt.ylabel("Amplitude")
         plt.legend()
-        plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.show()
 
     return {
-        "ppg_norm": ppg,
-        "peaks": peaks,
-        "feet": feet,
+        "foot_indices": feet.tolist(),
+        "peak_indices": peaks.tolist(),
+        "foot_times": foot_times.tolist(),
+        "peak_times": peak_times.tolist(),
         "beats_count": len(peaks)
     }
 
 
-# ---------------------- FEATURE EXTRACTION ----------------------
-def extract_ppg_features(ppg, fs, beats_info):
-    """Extract HR, HRV, amplitude, rise time, and variability metrics."""
+# ---------------------- METADATA INPUT ----------------------
+def get_metadata():
+    print("\nEnter metadata for this recording:")
+    age = int(input("Age: "))
+    sex = input("Sex (M/F/Other): ").strip().upper()
+    weight = float(input("Weight (kg): "))
+    height = float(input("Height (cm): "))
 
-    peaks = beats_info["peaks"]
-    feet = beats_info["feet"]
-    ppg_norm = beats_info["ppg_norm"]
-
-    if len(peaks) < 2:
-        print("⚠️ Not enough beats detected for feature extraction.")
-        return {}
-
-    # Compute peak times
-    peak_times = peaks / fs
-    ibi = np.diff(peak_times)
-    ibi_mean = np.mean(ibi)
-    ibi_std = np.std(ibi)
-    hr = 60.0 / ibi_mean if ibi_mean > 0 else 0.0
-    hrv = ibi_std * 1000  # ms-based
-
-    # Pair peaks with previous feet safely
-    paired_feet = []
-    paired_peaks = []
-    for p in peaks:
-        prior_feet = [f for f in feet if f < p]
-        if prior_feet:
-            paired_feet.append(prior_feet[-1])
-            paired_peaks.append(p)
-
-    paired_feet = np.array(paired_feet)
-    paired_peaks = np.array(paired_peaks)
-
-    if len(paired_peaks) > 0 and len(paired_feet) > 0:
-        amps = ppg_norm[paired_peaks] - ppg_norm[paired_feet]
-        amp_mean = np.mean(amps)
-        amp_std = np.std(amps)
-
-        rise_times = (paired_peaks - paired_feet) / fs
-        rt_mean = np.mean(rise_times)
-        rt_std = np.std(rise_times)
-    else:
-        amp_mean = amp_std = rt_mean = rt_std = 0.0
-
-    return {
-        "heart_rate_bpm": hr,
-        "ibi_mean_s": ibi_mean,
-        "ibi_std_s": ibi_std,
-        "hrv_ms": hrv,
-        "amplitude_mean": amp_mean,
-        "amplitude_std": amp_std,
-        "rise_time_mean_s": rt_mean,
-        "rise_time_std_s": rt_std,
-        "beats_detected": len(peaks)
-    }
-
-
-# ---------------------- FILE HANDLING ----------------------
-def get_latest_processed_file():
-    csv_files = [f for f in os.listdir(PROCESSED_PATH) if f.endswith("_processed.csv")]
-    if not csv_files:
-        print("❌ No processed files found.")
-        return None
-    latest = max([os.path.join(PROCESSED_PATH, f) for f in csv_files], key=os.path.getmtime)
-    return latest
-
-
-# ---------------------- MAIN PIPELINE ----------------------
-def run_feature_extraction(plot=True, save=True):
-    os.makedirs(FEATURES_PATH, exist_ok=True)
-
-    latest_file = get_latest_processed_file()
-    if latest_file is None:
-        return
-
-    print(f"📁 Using latest processed file: {os.path.basename(latest_file)}")
-    df = pd.read_csv(latest_file)
-
-    if "ir_filtered" not in df.columns:
-        print("❌ Missing 'ir_filtered' column. Run preprocessing first.")
-        return
-
-    ppg = df["ir_filtered"].to_numpy()
-
-    # Auto-detect sampling frequency
-    if "timestamp_ms" in df.columns:
-        timestamps = df["timestamp_ms"].to_numpy()
-        fs = 1000.0 / np.mean(np.diff(timestamps)) if len(timestamps) > 1 else 100
-    else:
-        fs = 100
-
-    print(f"🕒 Sampling Frequency: {fs:.2f} Hz")
-
-    beats_info = detect_beats(ppg, fs=fs, plot=plot)
-    features = extract_ppg_features(ppg, fs, beats_info)
-
-    if not features:
-        print("⚠️ No features extracted.")
-        return
-
-    # --- Get metadata ---
-    print("\nPlease enter basic metadata:")
-    age = int(input("Age (years): ") or 0)
-    sex = input("Sex (M/F): ").strip().upper() or "U"
-    weight = float(input("Weight (kg): ") or 0)
-    height = float(input("Height (cm): ") or 0)
-
-    bmi = round(weight / ((height / 100) ** 2), 2) if weight > 0 and height > 0 else 0
+    bmi = round(weight / ((height / 100) ** 2), 2)
 
     metadata = {
         "age": age,
@@ -167,11 +67,135 @@ def run_feature_extraction(plot=True, save=True):
         "height_cm": height,
         "bmi": bmi
     }
+    return metadata
 
-    # --- Combine and save ---
+
+# ---------------------- FEATURE EXTRACTION ----------------------
+def extract_ppg_features(ppg, fs, beats_info):
+    peaks = np.array(beats_info["peak_indices"])
+    feet = np.array(beats_info["foot_indices"])
+
+    # Handle mismatch
+    min_len = min(len(peaks), len(feet))
+    peaks = peaks[:min_len]
+    feet = feet[:min_len]
+
+    if len(peaks) < 2:
+        print("Not enough peaks detected.")
+        return {}
+
+    ibi = np.diff(beats_info["peak_times"])
+    heart_rate = 60 / ibi
+    hrv = np.std(ibi) * 1000
+
+    ppg_norm = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
+    amps = ppg_norm[peaks] - np.array([ppg_norm[f] for f in feet])
+    rise_times = (peaks - feet) / fs
+
+    features = {
+        "heart_rate_bpm": np.mean(heart_rate),
+        "ibi_mean_s": np.mean(ibi),
+        "ibi_std_s": np.std(ibi),
+        "hrv_ms": hrv,
+        "amplitude_mean": np.mean(amps),
+        "amplitude_std": np.std(amps),
+        "rise_time_mean_s": np.mean(rise_times),
+        "rise_time_std_s": np.std(rise_times),
+        "beats_detected": len(peaks)
+    }
+    return features
+
+
+# ---------------------- SANITY CHECK ----------------------
+def sanity_check(metadata, features):
+    warnings = []
+    age = metadata.get("age")
+    sex = metadata.get("sex", "").upper()
+    weight = metadata.get("weight_kg")
+    height = metadata.get("height_cm")
+    bmi = metadata.get("bmi")
+
+    hr = features.get("heart_rate_bpm")
+    hrv = features.get("hrv_ms")
+    ibi_mean = features.get("ibi_mean_s")
+    amp_mean = features.get("amplitude_mean")
+    rise_time = features.get("rise_time_mean_s")
+
+    # Metadata checks
+    if age is not None and not (5 <= age <= 100):
+        warnings.append(f"⚠️ Unrealistic age: {age}")
+    if weight is not None and not (20 <= weight <= 200):
+        warnings.append(f"⚠️ Unusual weight: {weight} kg")
+    if height is not None and not (100 <= height <= 220):
+        warnings.append(f"⚠️ Unusual height: {height} cm")
+    if bmi is not None and not (10 <= bmi <= 40):
+        warnings.append(f"⚠️ Out-of-range BMI: {bmi:.2f}")
+    if sex not in ("M", "F", "OTHER"):
+        warnings.append(f"⚠️ Unexpected sex value: '{sex}'")
+
+    # PPG-derived features
+    if hr is not None and not (40 <= hr <= 180):
+        warnings.append(f"⚠️ Implausible heart rate: {hr:.1f} bpm")
+    if ibi_mean is not None and hr is not None:
+        hr_calc = 60 / ibi_mean
+        if abs(hr - hr_calc) > 10:
+            warnings.append(f"⚠️ HR/IBI mismatch: HR={hr:.1f}, IBI→HR={hr_calc:.1f}")
+    if hrv is not None and not (10 <= hrv <= 300):
+        warnings.append(f"⚠️ HRV looks abnormal: {hrv:.1f} ms")
+    if amp_mean is not None and not (0.05 <= amp_mean <= 2.0):
+        warnings.append(f"⚠️ PPG amplitude unusually low/high: {amp_mean:.3f}")
+    if rise_time is not None and not (0.1 <= rise_time <= 0.6):
+        warnings.append(f"⚠️ Rise time outside expected physiological range: {rise_time:.3f}s")
+
+    return warnings
+
+
+# ---------------------- FILE HANDLING ----------------------
+def get_latest_processed_file():
+    csv_files = [f for f in os.listdir(PROCESSED_PATH) if f.endswith("_processed.csv")]
+    if not csv_files:
+        print("No processed CSV files found.")
+        return None
+    latest_file = max([os.path.join(PROCESSED_PATH, f) for f in csv_files], key=os.path.getmtime)
+    return latest_file
+
+
+# ---------------------- MAIN RUN FUNCTION ----------------------
+def run_feature_extraction(plot=False, save=True):
+    latest_file = get_latest_processed_file()
+    if latest_file is None:
+        return
+
+    print(f"\n📂 Using latest processed file: {os.path.basename(latest_file)}")
+    df = pd.read_csv(latest_file)
+
+    if "ir_filtered" in df.columns:
+        ppg = df["ir_filtered"].to_numpy()
+    elif "ppg" in df.columns:
+        ppg = df["ppg"].to_numpy()
+    else:
+        print("No valid PPG column found.")
+        return
+
+    fs = 100
+    beats_info = detect_beats(ppg, fs, plot=plot)
+    metadata = get_metadata()
+    features = extract_ppg_features(ppg, fs, beats_info)
+
+    # Combine
     result = {**metadata, **features}
     df_out = pd.DataFrame([result])
 
+    # Run sanity check
+    warnings = sanity_check(metadata, features)
+    if warnings:
+        print("\n⚠️ Sanity Check Warnings:")
+        for w in warnings:
+            print("   " + w)
+    else:
+        print("\n✅ All extracted values look physiologically valid.")
+
+    # Save
     if save:
         out_path = os.path.join(
             FEATURES_PATH,
@@ -180,13 +204,10 @@ def run_feature_extraction(plot=True, save=True):
         df_out.to_csv(out_path, index=False)
         print(f"\n💾 Saved extracted features → {out_path}")
 
-    # --- Clean and display neatly ---
     print("\n✅ Extracted Features:")
-    df_pretty = df_out.T.reset_index()
-    df_pretty.columns = ['Feature', 'Value']
-    print(df_pretty.to_string(index=False))
+    print(df_out.T)
 
 
-# ---------------------- RUN ----------------------
+# ---------------------- MAIN ----------------------
 if __name__ == "__main__":
-    run_feature_extraction(plot=True, save=True)
+    run_feature_extraction(plot=True)
