@@ -74,7 +74,7 @@ def get_latest_processed_file():
     """Find the most recent processed CSV file."""
     csv_files = [f for f in os.listdir(PROCESSED_PATH) if f.endswith("_processed.csv")]
     if not csv_files:
-        print("❌ No processed CSV files found in:", PROCESSED_PATH)
+        print("No processed CSV files found in:", PROCESSED_PATH)
         return None
     latest_file = max(
         [os.path.join(PROCESSED_PATH, f) for f in csv_files],
@@ -91,7 +91,7 @@ def run_latest_beat_detection(plot=True):
     if latest_file is None:
         return None
 
-    print(f"📁 Using latest processed file: {os.path.basename(latest_file)}")
+    print(f"Using latest processed file: {os.path.basename(latest_file)}")
     df = pd.read_csv(latest_file)
 
     # --- Auto detect sampling frequency ---
@@ -101,24 +101,24 @@ def run_latest_beat_detection(plot=True):
             intervals = np.diff(timestamps)
             avg_interval_ms = np.mean(intervals)
             fs = 1000.0 / avg_interval_ms  # Hz
-            print(f"⚙️  Auto-detected sampling frequency: {fs:.2f} Hz")
+            print(f"Auto-detected sampling frequency: {fs:.2f} Hz")
         else:
             fs = 100
-            print("⚠️  Not enough data to auto-detect FS, defaulting to 100 Hz.")
+            print("Not enough data to auto-detect FS, defaulting to 100 Hz.")
     else:
         fs = 100
-        print("⚠️  No timestamp column found, defaulting to 100 Hz.")
+        print("No timestamp column found, defaulting to 100 Hz.")
 
     # --- Verify column ---
     if "ir_filtered" not in df.columns:
-        print("❌ 'ir_filtered' column not found. Did you preprocess first?")
+        print("'ir_filtered' column not found. Did you preprocess first?")
         return None
 
     ppg = df["ir_filtered"].to_numpy()
-    print(f"📈 Loaded {len(ppg)} samples for beat detection")
+    print(f"Loaded {len(ppg)} samples for beat detection")
 
     results = detect_beats(ppg, fs=fs, plot=plot)
-    print(f"✅ Detected {results['beats_count']} beats")
+    print(f"Detected {results['beats_count']} beats")
 
     return results
 
