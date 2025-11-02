@@ -1,0 +1,11 @@
+timestamp_ms,ir_value
+1762090594973.2202,ets Jul 29 2019 12:21:46
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fff0030,len:4980
+load:0x40078000,len:16612
+load:0x40080400,len:3480
+1762090594996.997,entry 0x400805b4
+1762090595140.9668,E (17) i2c.master: I2C hardware NACK detected
+1762090595144.56,MAX30102 not found. Check wiring and power.

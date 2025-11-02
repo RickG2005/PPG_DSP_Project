@@ -1,0 +1,14 @@
+timestamp_ms,ir_value
+1762090671896.6082,ets Jul 29 2019 12:21:46
+rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+configsip: 0, SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fff0030,len:4980
+load:0x40078000,len:16612
+load:0x40080400,len:3480
+1762090671920.4668,entry 0x400805b4
+1762090672064.6392,E (17) i2c.master: I2C hardware NACK detected
+1762090672069.853,E (17) i2c.master: I2C transaction unexpected nack detected
+1762090672076.632,E (17) i2c.master: s_i2c_synchronous_transaction(945): I2C transaction failed
+1762090672083.3408,E (22) i2c.master: i2c_master_transmit_receive(1248): I2C transaction failed
+1762090672086.9,MAX30102 not found. Check wiring and power.

@@ -75,33 +75,77 @@ def extract_ppg_features(ppg, fs, beats_info):
     peaks = np.array(beats_info["peak_indices"])
     feet = np.array(beats_info["foot_indices"])
 
-    # Handle mismatch
     min_len = min(len(peaks), len(feet))
-    peaks = peaks[:min_len]
-    feet = feet[:min_len]
+    peaks, feet = peaks[:min_len], feet[:min_len]
 
     if len(peaks) < 2:
         print("Not enough peaks detected.")
         return {}
 
+    # --- Core temporal features ---
     ibi = np.diff(beats_info["peak_times"])
     heart_rate = 60 / ibi
     hrv = np.std(ibi) * 1000
 
+    # --- Normalize ---
     ppg_norm = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
     amps = ppg_norm[peaks] - np.array([ppg_norm[f] for f in feet])
     rise_times = (peaks - feet) / fs
 
+    # --- Morphological & vascular features ---
+    sdr_values, pw50_values, auc_values, dt_ratios = [], [], [], []
+    for i in range(len(peaks) - 1):
+        start, peak, end = feet[i], peaks[i], feet[i + 1]
+        segment = ppg_norm[start:end]
+
+        # systolic/diastolic ratio
+        if len(segment) > 2:
+            mid_point = np.argmax(segment)
+            systolic = segment[mid_point]
+            diastolic = np.min(segment[mid_point:])
+            if diastolic != 0:
+                sdr_values.append(systolic / abs(diastolic))
+
+        # Pulse width at half max
+        half_max = (ppg_norm[peaks[i]] + ppg_norm[feet[i]]) / 2
+        above_half = np.where(segment > half_max)[0]
+        if len(above_half) > 1:
+            pw50_values.append((above_half[-1] - above_half[0]) / fs)
+
+        # Area under curve (AUC)
+        auc_values.append(np.trapz(segment, dx=1 / fs))
+
+        # Diastolic time ratio
+        total_cycle = end - start
+        diastolic_time = end - peak
+        if total_cycle != 0:
+            dt_ratios.append(diastolic_time / total_cycle)
+
+    perfusion_index = (np.mean(amps) / np.max(ppg_norm)) * 100
+
     features = {
+        # --- Time-domain ---
         "heart_rate_bpm": np.mean(heart_rate),
         "ibi_mean_s": np.mean(ibi),
         "ibi_std_s": np.std(ibi),
         "hrv_ms": hrv,
+
+        # --- Amplitude & morphology ---
         "amplitude_mean": np.mean(amps),
         "amplitude_std": np.std(amps),
         "rise_time_mean_s": np.mean(rise_times),
         "rise_time_std_s": np.std(rise_times),
-        "beats_detected": len(peaks)
+
+        # --- New vascular features ---
+        "sdr_mean": np.mean(sdr_values) if sdr_values else np.nan,
+        "pw50_mean_s": np.mean(pw50_values) if pw50_values else np.nan,
+        "auc_mean": np.mean(auc_values) if auc_values else np.nan,
+        "dt_ratio_mean": np.mean(dt_ratios) if dt_ratios else np.nan,
+        "perfusion_index": perfusion_index,
+
+        # --- Metadata about recording ---
+        "beats_detected": len(peaks),
+        "recording_duration_s": len(ppg) / fs
     }
     return features
 
@@ -121,7 +165,6 @@ def sanity_check(metadata, features):
     amp_mean = features.get("amplitude_mean")
     rise_time = features.get("rise_time_mean_s")
 
-    # Metadata checks
     if age is not None and not (5 <= age <= 100):
         warnings.append(f"⚠️ Unrealistic age: {age}")
     if weight is not None and not (20 <= weight <= 200):
@@ -133,7 +176,6 @@ def sanity_check(metadata, features):
     if sex not in ("M", "F", "OTHER"):
         warnings.append(f"⚠️ Unexpected sex value: '{sex}'")
 
-    # PPG-derived features
     if hr is not None and not (40 <= hr <= 180):
         warnings.append(f"⚠️ Implausible heart rate: {hr:.1f} bpm")
     if ibi_mean is not None and hr is not None:
@@ -145,7 +187,7 @@ def sanity_check(metadata, features):
     if amp_mean is not None and not (0.05 <= amp_mean <= 2.0):
         warnings.append(f"⚠️ PPG amplitude unusually low/high: {amp_mean:.3f}")
     if rise_time is not None and not (0.1 <= rise_time <= 0.6):
-        warnings.append(f"⚠️ Rise time outside expected physiological range: {rise_time:.3f}s")
+        warnings.append(f"⚠️ Rise time outside physiological range: {rise_time:.3f}s")
 
     return warnings
 
@@ -182,11 +224,10 @@ def run_feature_extraction(plot=False, save=True):
     metadata = get_metadata()
     features = extract_ppg_features(ppg, fs, beats_info)
 
-    # Combine
+    # Combine + sanity check
     result = {**metadata, **features}
     df_out = pd.DataFrame([result])
 
-    # Run sanity check
     warnings = sanity_check(metadata, features)
     if warnings:
         print("\n⚠️ Sanity Check Warnings:")
@@ -195,7 +236,6 @@ def run_feature_extraction(plot=False, save=True):
     else:
         print("\n✅ All extracted values look physiologically valid.")
 
-    # Save
     if save:
         out_path = os.path.join(
             FEATURES_PATH,
