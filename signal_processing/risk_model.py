@@ -11,12 +11,13 @@ FINAL_PATH = r"C:\Users\rick2\Documents\PPG Project\data\final"
 
 BASELINE_PREVALENCE = 0.12  # global baseline prevalence
 
+# Weights
 METADATA_WEIGHTS = {
-    "family_history_first_degree": 0.35,
-    "age": 0.15,
-    "physical_activity_hrs_per_week": -0.10,
-    "sleep_hours": -0.05,
-    "smoking_status": 0.12
+    "family_history_first_degree": 0.45,  # Increased from 0.35
+    "age": 0.25,  # Increased from 0.15
+    "physical_activity_hrs_per_week": -0.20,  # Increased from -0.10
+    "sleep_hours": -0.10,  # Increased from -0.05
+    "smoking_status": 0.25  # Increased from 0.12
 }
 
 console = Console()
@@ -49,11 +50,19 @@ def compute_metadata_adjustment(features):
     # Family history: strong positive risk
     if str(family).lower() in ("1", "yes", "y", "true"):
         adj += METADATA_WEIGHTS["family_history_first_degree"]
+        print(f"  ✓ Family diabetes history detected: +{METADATA_WEIGHTS['family_history_first_degree']:.2f}")
 
     # Age effect: scaling from 45 upward
     try:
         if age and float(age) >= 45:
-            adj += METADATA_WEIGHTS["age"] * min(1.0, (float(age) - 45) / 20.0)
+            age_factor = METADATA_WEIGHTS["age"] * min(1.0, (float(age) - 45) / 20.0)
+            adj += age_factor
+            print(f"  ✓ Age risk (≥45): +{age_factor:.2f}")
+        elif age and float(age) >= 35:
+            # FIXED: Add moderate risk for ages 35-44
+            age_factor = METADATA_WEIGHTS["age"] * 0.3 * ((float(age) - 35) / 10.0)
+            adj += age_factor
+            print(f"  ✓ Age risk (35-44): +{age_factor:.2f}")
     except:
         pass
 
@@ -61,40 +70,73 @@ def compute_metadata_adjustment(features):
     try:
         if activity is not None:
             act = float(activity)
-            adj += METADATA_WEIGHTS["physical_activity_hrs_per_week"] * (1.0 - min(1.0, act / 5.0))
+            # FIXED: More aggressive activity penalty
+            if act <= 1:  # Sedentary
+                activity_penalty = METADATA_WEIGHTS["physical_activity_hrs_per_week"] * -1.0
+                adj += activity_penalty
+                print(f"  ✓ Sedentary lifestyle: +{activity_penalty:.2f}")
+            elif act == 2:  # Moderate
+                activity_penalty = METADATA_WEIGHTS["physical_activity_hrs_per_week"] * -0.5
+                adj += activity_penalty
+                print(f"  ✓ Moderate activity: +{activity_penalty:.2f}")
+            else:  # Active
+                activity_benefit = METADATA_WEIGHTS["physical_activity_hrs_per_week"] * 0.8
+                adj += activity_benefit
+                print(f"  ✓ Active lifestyle: {activity_benefit:.2f}")
     except:
         pass
 
-    # Sleep: <6 or >9 hrs slightly increases risk
+    # Sleep: <6 or >9 hrs increases risk
     try:
         if sleep_h is not None:
             sh = float(sleep_h)
             if sh < 6.0:
-                adj += 0.03
+                sleep_penalty = 0.08  # Increased from 0.03
+                adj += sleep_penalty
+                print(f"  ✓ Sleep deprivation (<6h): +{sleep_penalty:.2f}")
             elif 7.0 <= sh <= 9.0:
-                adj -= 0.02
+                sleep_benefit = -0.05  # Increased from -0.02
+                adj += sleep_benefit
+                print(f"  ✓ Healthy sleep (7-9h): {sleep_benefit:.2f}")
             elif sh > 9.0:
-                adj += 0.02
+                sleep_penalty = 0.05  # Increased from 0.02
+                adj += sleep_penalty
+                print(f"  ✓ Excessive sleep (>9h): +{sleep_penalty:.2f}")
     except:
         pass
 
-    # Smoking: moderate positive risk
+    # Smoking: strong positive risk
     if str(smoking).lower() in ("1", "yes", "y", "true"):
         adj += METADATA_WEIGHTS["smoking_status"]
+        print(f"  ✓ Smoking habit: +{METADATA_WEIGHTS['smoking_status']:.2f}")
 
-    return float(np.clip(adj, -0.3, 0.6))
+    # Wide clamping range 
+    final_adj = float(np.clip(adj, -0.5, 0.8))
+    print(f"\n  📊 Total Metadata Adjustment: {final_adj:.3f}")
+    return final_adj
 
 
 def physiology_to_absolute_probability(phys_score, metadata_adj, baseline=BASELINE_PREVALENCE):
     """Converts physiology + metadata adjustment → absolute diabetes risk."""
-    k = 2.7
+    # Sensitivity multipliers
+    k = 4.5  
     phys_mult = 1.0 + k * phys_score
-    meta_mult = 1.0 + metadata_adj
+    
+    # Metadata adjustment 
+    meta_mult = 1.0 + (metadata_adj * 2.0)  # Doubled the impact
+    
     combined = phys_mult * meta_mult
 
+    print(f"\n  🧮 Risk Calculation:")
+    print(f"     Physiology multiplier: {phys_mult:.3f}")
+    print(f"     Metadata multiplier: {meta_mult:.3f}")
+    print(f"     Combined multiplier: {combined:.3f}")
+
     current = float(np.clip(baseline * combined, 0.0, 0.9))
-    ten = float(np.clip(current * (1.0 + 0.4 * phys_score + max(0.0, metadata_adj) * 0.6), 0.0, 0.99))
-    thirty = float(np.clip(current * (1.0 + 1.1 * phys_score + max(0.0, metadata_adj) * 1.4), 0.0, 0.99))
+    
+    # Projection multipliers
+    ten = float(np.clip(current * (1.0 + 0.6 * phys_score + max(0.0, metadata_adj) * 1.0), 0.0, 0.99))
+    thirty = float(np.clip(current * (1.0 + 1.5 * phys_score + max(0.0, metadata_adj) * 2.0), 0.0, 0.99))
 
     return current, ten, thirty
 
@@ -104,7 +146,10 @@ def run_diabetes_prediction(physiology_output, save=True):
     features = physiology_output.get("metadata", {})
     phys_score = physiology_output.get("physiology_score", 0.0)
 
+    print("\n🔍 Analyzing metadata risk factors:")
+    print("-" * 50)
     meta_adj = compute_metadata_adjustment(features)
+    
     current, p10, p30 = physiology_to_absolute_probability(phys_score, meta_adj, BASELINE_PREVALENCE)
 
     # -------- Display results --------
@@ -147,20 +192,51 @@ def run_diabetes_prediction(physiology_output, save=True):
         "current_risk": round(current * 100, 2),
         "10yr_risk": round(p10 * 100, 2),
         "30yr_risk": round(p30 * 100, 2),
-        "risk_label": label
+        "risk_label": label,
+        "physiology_score": round(phys_score * 100, 2),
+        "metadata_adjustment": round(meta_adj * 100, 2)
     }
 
 
 # ---------- TEST ----------
 if __name__ == "__main__":
-    sample_data = {
+    # Test with high-risk profile
+    sample_data_high_risk = {
         "physiology_score": 0.18,
         "metadata": {
             "family_diabetes": "yes",
-            "age": 26,
-            "activity_score": 1,
-            "sleep_hours": 6,
+            "age": 50,
+            "activity_score": 1,  # Sedentary
+            "sleep_hours": 5,  # Sleep deprived
             "smoker": "yes"
         }
     }
-    run_diabetes_prediction(sample_data)
+    
+    print("\n" + "="*60)
+    print("TEST 1: HIGH RISK PROFILE")
+    print("="*60)
+    result1 = run_diabetes_prediction(sample_data_high_risk)
+    
+    # Test with low-risk profile
+    sample_data_low_risk = {
+        "physiology_score": 0.05,
+        "metadata": {
+            "family_diabetes": "no",
+            "age": 25,
+            "activity_score": 3,  # Active
+            "sleep_hours": 8,
+            "smoker": "no"
+        }
+    }
+    
+    print("\n" + "="*60)
+    print("TEST 2: LOW RISK PROFILE")
+    print("="*60)
+    result2 = run_diabetes_prediction(sample_data_low_risk)
+    
+    print("\n" + "="*60)
+    print("COMPARISON:")
+    print("="*60)
+    print(f"High Risk Profile: {result1['current_risk']}% current risk")
+    print(f"Low Risk Profile: {result2['current_risk']}% current risk")
+    print(f"Difference: {result1['current_risk'] - result2['current_risk']:.1f}%")

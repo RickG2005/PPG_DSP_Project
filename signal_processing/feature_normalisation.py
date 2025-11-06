@@ -1,4 +1,3 @@
-# feature_normalisation.py
 import os
 import pandas as pd
 import numpy as np
@@ -86,6 +85,21 @@ def run_feature_normalisation(save=True):
 
     phys_score, phys_breakdown = compute_physiology_score(features)
 
+    # FIXED: Extract metadata from features file
+    metadata = {
+        "age": features.get("age"),
+        "sex": features.get("sex"),
+        "weight_kg": features.get("weight_kg"),
+        "height_cm": features.get("height_cm"),
+        "bmi": features.get("bmi"),
+        "sleep_hours": features.get("sleep_hours"),
+        "activity_level": features.get("activity_level"),
+        "activity_score": features.get("activity_score"),
+        "family_diabetes": features.get("family_diabetes"),
+        "smoker": features.get("smoker"),
+        "caffeine_intake": features.get("caffeine_intake")
+    }
+
     # Save the normalized physiology summary
     if save:
         os.makedirs(RISK_PATH, exist_ok=True)
@@ -98,11 +112,16 @@ def run_feature_normalisation(save=True):
         ]).to_csv(out_risk, index=False)
         print(f"💾 Saved normalized physiology → {out_risk}")
 
+    # FIXED: Return both physiology score and metadata
     return {
         "physiology_score": round(phys_score, 4),
         "breakdown": phys_breakdown,
+        "metadata": metadata,  # Now includes actual user metadata
         "source_features": latest
     }
 
 if __name__ == "__main__":
-    run_feature_normalisation(save=True)
+    result = run_feature_normalisation(save=True)
+    if result:
+        print(f"\nPhysiology Score: {result['physiology_score']}")
+        print(f"Metadata: {result['metadata']}")

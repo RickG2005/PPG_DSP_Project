@@ -204,7 +204,7 @@ def get_latest_processed_file():
 def run_feature_extraction(beats_info, plot=False, save=True):
     latest_file = get_latest_processed_file()
     if latest_file is None:
-        return
+        return None
 
     print(f"\n📂 Using latest processed file: {os.path.basename(latest_file)}")
     df = pd.read_csv(latest_file)
@@ -215,7 +215,7 @@ def run_feature_extraction(beats_info, plot=False, save=True):
         ppg = df["ppg"].to_numpy()
     else:
         print("No valid PPG column found.")
-        return
+        return None
 
     fs = 100
     metadata = get_metadata()
@@ -243,6 +243,9 @@ def run_feature_extraction(beats_info, plot=False, save=True):
 
     print("\n✅ Extracted Features:")
     print(df_out.T)
+
+    # FIXED: Return the file path so main.py can use it
+    return out_path
 
 
 # ---------------------- MAIN ----------------------

@@ -8,7 +8,7 @@ DATA_COLLECT_DIR = os.path.join(BASE_DIR, "ppg_data_collect")
 SIGNAL_DIR = os.path.join(BASE_DIR, "signal_processing")
 RAW_PATH = os.path.join(BASE_DIR, "data", "raw")
 
-# Add subfolders to Python’s import path
+# Add subfolders to Python's import path
 sys.path.extend([DATA_COLLECT_DIR, SIGNAL_DIR])
 
 # ---------------- IMPORTS ----------------
@@ -16,7 +16,7 @@ import preprocess
 import beat_detection
 import feature_extraction
 import feature_normalisation
-import risk_model  # ← new module for risk scoring
+import risk_model
 
 
 def get_latest_raw_file():
@@ -34,7 +34,9 @@ def get_latest_raw_file():
 
 
 def main():
-    print("\n🩸 PPG Data Processing Pipeline (ESP32 Bypass Active) 🩸\n")
+    print("\n" + "="*60)
+    print("🩸 PPG DIABETES RISK ASSESSMENT PIPELINE")
+    print("="*60 + "\n")
 
     # --- Phase 1 (Skipped): Data Collection ---
     print("⚙️ Skipping data collection...")
@@ -44,67 +46,78 @@ def main():
         return
 
     # --- Phase 2: Preprocessing ---
-    print("\n[1/5] Preprocessing raw signal...")
+    print("\n" + "-"*60)
+    print("[1/5] PREPROCESSING RAW SIGNAL")
+    print("-"*60)
     processed_file = preprocess.run_preprocessing(raw_file)
     print(f"✅ Preprocessed data saved → {processed_file}")
 
     # --- Phase 3: Beat Detection ---
-    print("\n[2/5] Detecting beats...")
+    print("\n" + "-"*60)
+    print("[2/5] DETECTING HEARTBEATS")
+    print("-"*60)
     beats_data = beat_detection.run_latest_beat_detection(plot=True)
     if beats_data is None:
         print("❌ Beat detection failed.")
         return
     print("✅ Beat detection completed.")
 
-    # --- Phase 4: Feature Extraction ---
-    print("\n[3/5] Extracting features...")
-    features_file = feature_extraction.run_feature_extraction(beats_data)
+    # --- Phase 4: Feature Extraction (with metadata input) ---
+    print("\n" + "-"*60)
+    print("[3/5] EXTRACTING FEATURES & COLLECTING METADATA")
+    print("-"*60)
+    features_file = feature_extraction.run_feature_extraction(beats_data, save=True)
+    if features_file is None:
+        print("❌ Feature extraction failed.")
+        return
     print(f"✅ Feature extraction complete → {features_file}")
 
-            # --- Phase 5A: Feature Normalisation ---
-    print("\n[4/5] Normalising features...")
-    normalized_features = feature_normalisation.run_feature_normalisation(save=False)
-    if normalized_features is None:
+    # --- Phase 5A: Feature Normalisation ---
+    print("\n" + "-"*60)
+    print("[4/5] NORMALISING PHYSIOLOGICAL FEATURES")
+    print("-"*60)
+    normalized_output = feature_normalisation.run_feature_normalisation(save=True)
+    if normalized_output is None:
         print("❌ Feature normalisation failed.")
         return
+    
+    physiology_score = normalized_output.get("physiology_score", 0.0)
+    metadata = normalized_output.get("metadata", {})
+    
     print("✅ Features normalised successfully.")
-
-    # --- Extract physiology score correctly ---
-    physiology_score = normalized_features.get("physiology_score", 0.0)
-
-    # --- Example metadata (replace with real input or user questionnaire) ---
-    metadata = {
-        "family_history_first_degree": "yes",  # or user input
-        "age": 26,
-        "physical_activity_hrs_per_week": 1,
-        "sleep_hours": 6,
-        "smoking_status": "yes"
-    }
-
-    # --- Prepare input for risk model ---
-    physiology_output = {
-        "physiology_score": physiology_score,
-        "metadata": metadata
-    }
-
+    print(f"   Physiology Score: {physiology_score:.4f}")
 
     # --- Phase 5B: Risk Assessment ---
-    print("\n[5/5] Running diabetes risk assessment...\n")
+    print("\n" + "-"*60)
+    print("[5/5] COMPUTING DIABETES RISK")
+    print("-"*60)
+    
+    # Use metadata
+    physiology_output = {
+        "physiology_score": physiology_score,
+        "metadata": metadata  # This now contains the real user input
+    }
+
     result = risk_model.run_diabetes_prediction(physiology_output, save=True)
 
-    # Display result in a nice summary block
-    print("\n" + "=" * 50)
+    # Display final summary
+    print("\n" + "="*60)
     print("🧬 FINAL HEALTH RISK SUMMARY")
-    print("=" * 50)
-    print(f"🏷️  Risk Category:  {result['risk_label']}")
-    print(f"⚡ Current Diabetes Risk: {result['current_risk']}%")
-    print(f"⏳ 10-Year Risk: {result['10yr_risk']}%")
-    print(f"🧠 30-Year Risk: {result['30yr_risk']}%")
-    print("-" * 50)
-    print("Breakdown:")
-    print(f"  Physiology Score:           {physiology_score:.3f}")
-    print(f"  Metadata Adjustments:       {metadata}")
-    print("=" * 50)
+    print("="*60)
+    print(f"🏷️  Risk Category:           {result['risk_label']}")
+    print(f"⚡ Current Diabetes Risk:    {result['current_risk']}%")
+    print(f"⏳ 10-Year Projected Risk:   {result['10yr_risk']}%")
+    print(f"🧠 30-Year Projected Risk:   {result['30yr_risk']}%")
+    print("-" * 60)
+    print("📊 Breakdown:")
+    print(f"   Physiology Score:         {result['physiology_score']:.2f}%")
+    print(f"   Metadata Adjustment:      {result['metadata_adjustment']:.2f}%")
+    print("-" * 60)
+    print("👤 User Profile:")
+    for key, value in metadata.items():
+        if value is not None and not (isinstance(value, float) and np.isnan(value)):
+            print(f"   {key:25s}: {value}")
+    print("="*60)
     print("✅ Pipeline complete!\n")
 
 
