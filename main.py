@@ -12,6 +12,7 @@ RAW_PATH = os.path.join(BASE_DIR, "data", "raw")
 sys.path.extend([DATA_COLLECT_DIR, SIGNAL_DIR])
 
 # ---------------- IMPORTS ----------------
+import data_to_csv
 import preprocess
 import beat_detection
 import feature_extraction
@@ -19,42 +20,31 @@ import feature_normalisation
 import risk_model
 
 
-def get_latest_raw_file():
-    """Get the most recent raw CSV from the data/raw folder."""
-    if not os.path.exists(RAW_PATH):
-        print(f"❌ Raw data folder not found: {RAW_PATH}")
-        return None
-    csv_files = [f for f in os.listdir(RAW_PATH) if f.endswith(".csv")]
-    if not csv_files:
-        print("❌ No raw CSV files found in data/raw.")
-        return None
-    latest_file = max([os.path.join(RAW_PATH, f) for f in csv_files], key=os.path.getmtime)
-    print(f"📂 Using latest raw file: {os.path.basename(latest_file)}")
-    return latest_file
-
-
 def main():
     print("\n" + "="*60)
     print("🩸 PPG DIABETES RISK ASSESSMENT PIPELINE")
     print("="*60 + "\n")
 
-    # --- Phase 1 (Skipped): Data Collection ---
-    print("⚙️ Skipping data collection...")
-    raw_file = get_latest_raw_file()
+    # --- Phase 1: Data Collection ---
+    print("-"*60)
+    print("[1/6] COLLECTING PPG DATA FROM ESP32 SENSOR")
+    print("-"*60)
+    raw_file = data_to_csv.run_data_collection()
     if not raw_file:
-        print("❌ No existing raw file found. Please add one manually.")
+        print("❌ Data collection failed. No raw file generated.")
         return
+    print(f"✅ Data collection complete → {raw_file}")
 
     # --- Phase 2: Preprocessing ---
     print("\n" + "-"*60)
-    print("[1/5] PREPROCESSING RAW SIGNAL")
+    print("[2/6] PREPROCESSING RAW SIGNAL")
     print("-"*60)
     processed_file = preprocess.run_preprocessing(raw_file)
     print(f"✅ Preprocessed data saved → {processed_file}")
 
     # --- Phase 3: Beat Detection ---
     print("\n" + "-"*60)
-    print("[2/5] DETECTING HEARTBEATS")
+    print("[3/6] DETECTING HEARTBEATS")
     print("-"*60)
     beats_data = beat_detection.run_latest_beat_detection(plot=True)
     if beats_data is None:
@@ -64,7 +54,7 @@ def main():
 
     # --- Phase 4: Feature Extraction (with metadata input) ---
     print("\n" + "-"*60)
-    print("[3/5] EXTRACTING FEATURES & COLLECTING METADATA")
+    print("[4/6] EXTRACTING FEATURES & COLLECTING METADATA")
     print("-"*60)
     features_file = feature_extraction.run_feature_extraction(beats_data, save=True)
     if features_file is None:
@@ -72,9 +62,9 @@ def main():
         return
     print(f"✅ Feature extraction complete → {features_file}")
 
-    # --- Phase 5A: Feature Normalisation ---
+    # --- Phase 5: Feature Normalisation ---
     print("\n" + "-"*60)
-    print("[4/5] NORMALISING PHYSIOLOGICAL FEATURES")
+    print("[5/6] NORMALISING PHYSIOLOGICAL FEATURES")
     print("-"*60)
     normalized_output = feature_normalisation.run_feature_normalisation(save=True)
     if normalized_output is None:
@@ -87,15 +77,15 @@ def main():
     print("✅ Features normalised successfully.")
     print(f"   Physiology Score: {physiology_score:.4f}")
 
-    # --- Phase 5B: Risk Assessment ---
+    # --- Phase 6: Risk Assessment ---
     print("\n" + "-"*60)
-    print("[5/5] COMPUTING DIABETES RISK")
+    print("[6/6] COMPUTING DIABETES RISK")
     print("-"*60)
     
-    # Use metadata
+    # Use metadata from feature extraction
     physiology_output = {
         "physiology_score": physiology_score,
-        "metadata": metadata  # This now contains the real user input
+        "metadata": metadata
     }
 
     result = risk_model.run_diabetes_prediction(physiology_output, save=True)
