@@ -1,0 +1,7 @@
+Metric,Value
+Physiology Score (%),12.7
+Component: heart_rate_bpm,27.78
+Component: hrv_ms,20.0
+Component: amplitude_mean,0.0
+Component: rise_time_mean_s,0.0
+Component: bmi,9.38

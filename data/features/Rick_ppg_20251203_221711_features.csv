@@ -1,0 +1,2 @@
+age,sex,weight_kg,height_cm,bmi,sleep_hours,activity_level,activity_score,family_diabetes,smoker,caffeine_intake,heart_rate_bpm,ibi_mean_s,ibi_std_s,hrv_ms,amplitude_mean,amplitude_std,rise_time_mean_s,rise_time_std_s,sdr_mean,pw50_mean_s,auc_mean,dt_ratio_mean,perfusion_index,beats_detected,recording_duration_s
+20,M,58.0,180.0,17.9,10.0,active,3,no,no,none,111.1111111111111,0.54,0.0,0.0,0.7923859752623912,0.20761402473760887,0.44500000000000006,0.10500000000000001,2476.355297866687,0.21,0.39028024439936454,0.26666666666666666,79.23859752623912,2,1.62

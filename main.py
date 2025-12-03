@@ -1,12 +1,17 @@
 import sys, os
 from datetime import datetime
 import numpy as np
+from flask import Flask, render_template
+import pandas as pd
 
 # ---------------- PATH FIX ----------------
 BASE_DIR = os.path.dirname(__file__)
+DISPLAY_DIR = os.path.join(BASE_DIR, "display")
+TEMPLATES_DIR = os.path.join(DISPLAY_DIR, "templates")
 DATA_COLLECT_DIR = os.path.join(BASE_DIR, "ppg_data_collect")
 SIGNAL_DIR = os.path.join(BASE_DIR, "signal_processing")
 RAW_PATH = os.path.join(BASE_DIR, "data", "raw")
+FINAL_PATH = os.path.join(BASE_DIR, "data", "final")
 
 # Add subfolders to Python's import path
 sys.path.extend([DATA_COLLECT_DIR, SIGNAL_DIR])
@@ -19,8 +24,28 @@ import feature_extraction
 import feature_normalisation
 import risk_model
 
+# ---------------- FLASK APP ----------------
+app = Flask(__name__, template_folder=TEMPLATES_DIR)
 
-def main():
+def get_latest_final_csv():
+    csv_files = [f for f in os.listdir(FINAL_PATH) if f.endswith(".csv")]
+    if not csv_files:
+        return None
+    latest_file = max([os.path.join(FINAL_PATH, f) for f in csv_files], key=os.path.getmtime)
+    return latest_file
+
+@app.route("/")
+def index():
+    latest_file = get_latest_final_csv()
+    if not latest_file:
+        return "<h2>No final data found.</h2>"
+
+    df = pd.read_csv(latest_file)
+    records = df.to_dict(orient="records")
+    return render_template("index.html", records=records, filename=os.path.basename(latest_file))
+
+# ---------------- PIPELINE ----------------
+def run_pipeline():
     print("\n" + "="*60)
     print("🩸 PPG DIABETES RISK ASSESSMENT PIPELINE")
     print("="*60 + "\n")
@@ -52,7 +77,7 @@ def main():
         return
     print("✅ Beat detection completed.")
 
-    # --- Phase 4: Feature Extraction (with metadata input) ---
+    # --- Phase 4: Feature Extraction ---
     print("\n" + "-"*60)
     print("[4/6] EXTRACTING FEATURES & COLLECTING METADATA")
     print("-"*60)
@@ -82,7 +107,6 @@ def main():
     print("[6/6] COMPUTING DIABETES RISK")
     print("-"*60)
     
-    # Use metadata from feature extraction
     physiology_output = {
         "physiology_score": physiology_score,
         "metadata": metadata
@@ -90,7 +114,7 @@ def main():
 
     result = risk_model.run_diabetes_prediction(physiology_output, save=True)
 
-    # Display final summary
+    # Display CLI summary
     print("\n" + "="*60)
     print("🧬 FINAL HEALTH RISK SUMMARY")
     print("="*60)
@@ -110,6 +134,14 @@ def main():
     print("="*60)
     print("✅ Pipeline complete!\n")
 
-
 if __name__ == "__main__":
-    main()
+    # Step 1: Run the CLI pipeline
+    run_pipeline()
+
+    # Step 2: Ask user if they want to see the web page
+    choice = input("\n🌐 Open web page with latest report? (y/n): ").strip().lower()
+    if choice in ("y", "yes"):
+        print("🚀 Starting Flask web server at http://127.0.0.1:5000 ...")
+        app.run(debug=False)
+    else:
+        print("❌ Web server not started. Pipeline finished.")

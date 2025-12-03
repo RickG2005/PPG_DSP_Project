@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PPG Diabetes Risk Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px; }
+        h1 { color: #007bff; }
+        table { border-collapse: collapse; width: 60%; margin-top: 20px; }
+        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
+        th { background-color: #007bff; color: white; }
+        tr:nth-child(even) { background-color: #e9ecef; }
+    </style>
+</head>
+<body>
+    <h1>PPG Diabetes Risk Report</h1>
+    <h3>File: {{ filename }}</h3>
+
+    <table>
+        <tr>
+            <th>Metric</th>
+            <th>Value</th>
+        </tr>
+        {% for row in records %}
+        <tr>
+            <td>{{ row['Metric'] }}</td>
+            <td>{{ row['Value'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
