@@ -42,7 +42,43 @@ def index():
 
     df = pd.read_csv(latest_file)
     records = df.to_dict(orient="records")
-    return render_template("index.html", records=records, filename=os.path.basename(latest_file))
+
+    # Separate risk metrics from metadata
+    risk_keys = {
+        "Current Likelihood (%)": "current_risk",
+        "10-Year Risk (%)": "10yr_risk",
+        "30-Year Risk (%)": "30yr_risk",
+        "Physiology Score (%)": "physiology_score",
+        "Metadata Adjustment (%)": "metadata_adjustment"
+    }
+
+    risk = {}
+    metadata = {}
+    for row in records:
+        key = row["Metric"]
+        value = row["Value"]
+        if key in risk_keys:
+            risk[risk_keys[key]] = value
+        else:
+            metadata[key] = value
+
+    # Assign risk label
+    current = float(risk.get("current_risk", 0))
+    if current < 5:
+        risk["risk_label"] = "Very Low Risk"
+    elif current < 15:
+        risk["risk_label"] = "Low Risk"
+    elif current < 30:
+        risk["risk_label"] = "Moderate Risk"
+    else:
+        risk["risk_label"] = "High Risk"
+
+    return render_template(
+        "index.html",
+        filename=os.path.basename(latest_file),
+        risk=risk,
+        metadata=metadata
+    )
 
 # ---------------- PIPELINE ----------------
 def run_pipeline():

@@ -4,29 +4,46 @@
     <meta charset="UTF-8">
     <title>PPG Diabetes Risk Report</title>
     <style>
-        body { font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px; }
-        h1 { color: #007bff; }
-        table { border-collapse: collapse; width: 60%; margin-top: 20px; }
-        th, td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
-        th { background-color: #007bff; color: white; }
-        tr:nth-child(even) { background-color: #e9ecef; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f2f5; padding: 20px; }
+        h1 { color: #1f78d1; text-align: center; }
+        h2 { color: #333; margin-top: 40px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+        .section { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 3px 8px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #1f78d1; color: #fff; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .risk-label { font-size: 1.2em; font-weight: bold; color: #d9534f; }
+        .metric-title { width: 50%; }
     </style>
 </head>
 <body>
-    <h1>PPG Diabetes Risk Report</h1>
-    <h3>File: {{ filename }}</h3>
+    <h1>🧬 PPG Diabetes Risk Report</h1>
+    <p style="text-align:center;">File: <strong>{{ filename }}</strong></p>
 
-    <table>
-        <tr>
-            <th>Metric</th>
-            <th>Value</th>
-        </tr>
-        {% for row in records %}
-        <tr>
-            <td>{{ row['Metric'] }}</td>
-            <td>{{ row['Value'] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div class="section">
+        <h2>📊 Risk Summary</h2>
+        <p class="risk-label">🏷️ Risk Category: {{ risk.risk_label }}</p>
+        <table>
+            <tr><th class="metric-title">Metric</th><th>Value</th></tr>
+            <tr><td>⚡ Current Diabetes Risk</td><td>{{ risk.current_risk }}%</td></tr>
+            <tr><td>⏳ 10-Year Projected Risk</td><td>{{ risk['10yr_risk'] }}%</td></tr>
+            <tr><td>🧠 30-Year Projected Risk</td><td>{{ risk['30yr_risk'] }}%</td></tr>
+            <tr><td>Physiology Score</td><td>{{ risk.physiology_score }}%</td></tr>
+            <tr><td>Metadata Adjustment</td><td>{{ risk.metadata_adjustment }}%</td></tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>👤 User Profile / Metadata</h2>
+        <table>
+            <tr><th class="metric-title">Parameter</th><th>Value</th></tr>
+            {% for key, value in metadata.items() %}
+            <tr>
+                <td>{{ key }}</td>
+                <td>{{ value }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
 </body>
 </html>

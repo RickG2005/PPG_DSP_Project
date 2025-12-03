@@ -1,0 +1,17 @@
+Metric,Value
+Current Likelihood (%),12.72
+10-Year Risk (%),13.32
+30-Year Risk (%),14.0
+Physiology Score (%),11.79
+Metadata Adjustment (%),-14.0
+age,20
+sex,M
+weight_kg,89.0
+height_cm,190.0
+bmi,24.65
+sleep_hours,8.0
+activity_level,active
+activity_score,3
+family_diabetes,no
+smoker,no
+caffeine_intake,none
