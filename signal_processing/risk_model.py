@@ -5,13 +5,11 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
-# ---------- CONFIG ----------
 RISK_PATH = r"C:\Users\rick2\Documents\PPG Project\data\risk"
 FINAL_PATH = r"C:\Users\rick2\Documents\PPG Project\data\final"
 
 BASELINE_PREVALENCE = 0.12  # global baseline prevalence (12%)
 
-# ---------- MEDICALLY-ASSESSED METADATA WEIGHTS ----------
 METADATA_WEIGHTS = {
     "family_history_first_degree": 0.45,
     "age": 0.25,
@@ -22,7 +20,7 @@ METADATA_WEIGHTS = {
 
 console = Console()
 
-# ---------- CORE FUNCTIONS ----------
+# CORE FUNCTIONS
 def compute_metadata_adjustment(features):
     family = features.get("family_history_first_degree") or features.get("family_diabetes") or features.get("family_history")
     smoking = features.get("smoking_status") or features.get("smoker")
