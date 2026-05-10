@@ -4,23 +4,22 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-# ---------------------- CONFIG ----------------------
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
 FEATURES_PATH = r"C:\Users\rick2\Documents\PPG Project\data\features"
 
 
-# ---------------------- METADATA INPUT ----------------------
+# Take metadata
 def get_metadata():
     print("\n📋 Enter participant metadata and lifestyle details:")
     print("---------------------------------------------------")
 
-    # --- Basic Demographics ---
+    # Basic Demographics 
     age = int(input("Age (in years): "))
     sex = input("Sex (M/F/Other): ").strip().upper()
     weight = float(input("Weight (in kg): "))
     height = float(input("Height (in cm): "))
 
-    # --- Lifestyle & Health Descriptors ---
+    # Lifestyle & Health Descriptors
     print("\n💤 Average sleep per night (in hours):")
     print("   - Try to give your regular nightly average.")
     sleep_hours = float(input("Hours of sleep: "))
@@ -46,7 +45,7 @@ def get_metadata():
     print("   - high: 5+ cups or energy drinks daily")
     caffeine_intake = input("Caffeine intake (none / low / moderate / high): ").strip().lower()
 
-    # --- Derived Metrics ---
+    # Derived Metrics 
     bmi = round(weight / ((height / 100) ** 2), 2)
 
     # Numeric encoding for easier modeling
@@ -56,7 +55,7 @@ def get_metadata():
         "active": 3
     }.get(activity_level, np.nan)
 
-    # --- Final Dictionary ---
+    # Final Dictionary 
     metadata = {
         "age": age,
         "sex": sex,
@@ -80,7 +79,7 @@ def get_metadata():
 
 
 
-# ---------------------- FEATURE EXTRACTION ----------------------
+# Feature extraction
 def extract_ppg_features(ppg, fs, beats_info):
     peaks = np.array(beats_info["peak_indices"])
     feet = np.array(beats_info["foot_indices"])
@@ -92,17 +91,17 @@ def extract_ppg_features(ppg, fs, beats_info):
         print("⚠️ Not enough peaks detected.")
         return {}
 
-    # --- Temporal features ---
+    # Temporal features
     ibi = np.diff(beats_info["peak_times"])
     heart_rate = 60 / ibi
     hrv = np.std(ibi) * 1000
 
-    # --- Normalize PPG ---
+    # Normalize PPG 
     ppg_norm = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
     amps = ppg_norm[peaks] - np.array([ppg_norm[f] for f in feet])
     rise_times = (peaks - feet) / fs
 
-    # --- Morphological features ---
+    # Morphological features 
     sdr_values, pw50_values, auc_values, dt_ratios = [], [], [], []
     for i in range(len(peaks) - 1):
         start, peak, end = feet[i], peaks[i], feet[i + 1]
@@ -148,7 +147,7 @@ def extract_ppg_features(ppg, fs, beats_info):
     return features
 
 
-# ---------------------- SANITY CHECK ----------------------
+# Sanity Check
 def sanity_check(metadata, features):
     warnings = []
     age = metadata.get("age")
@@ -190,7 +189,7 @@ def sanity_check(metadata, features):
     return warnings
 
 
-# ---------------------- FILE HANDLING ----------------------
+# File handling
 def get_latest_processed_file():
     csv_files = [f for f in os.listdir(PROCESSED_PATH) if f.endswith("_processed.csv")]
     if not csv_files:
@@ -200,7 +199,7 @@ def get_latest_processed_file():
     return latest_file
 
 
-# ---------------------- MAIN RUN FUNCTION ----------------------
+# Main Run Fn
 def run_feature_extraction(beats_info, plot=False, save=True):
     latest_file = get_latest_processed_file()
     if latest_file is None:
@@ -248,7 +247,7 @@ def run_feature_extraction(beats_info, plot=False, save=True):
     return out_path
 
 
-# ---------------------- MAIN ----------------------
+# MAIN
 if __name__ == "__main__":
     print("⚙️ This script expects 'beats_info' to be passed from beat_detection.py")
     print("Import and call run_feature_extraction(beats_info) from your main script.")
