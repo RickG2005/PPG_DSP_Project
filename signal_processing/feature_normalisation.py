@@ -3,11 +3,9 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-# ---------- CONFIG ----------
 FEATURES_PATH = r"C:\Users\rick2\Documents\PPG Project\data\features"
 RISK_PATH = r"C:\Users\rick2\Documents\PPG Project\data\risk"
 
-# ---------- HELPERS ----------
 def safe_get(d, k):
     v = d.get(k)
     return None if (pd.isna(v) or v is None) else v
@@ -29,7 +27,7 @@ def risk_from_deviation(value, normal_min, normal_max, weight=1.0):
 def clamp01(x):
     return float(np.clip(x, 0.0, 1.0))
 
-# ---------- WEIGHTS & RANGES ----------
+# WEIGHTS & RANGES 
 PPG_WEIGHTS = {
     "heart_rate_bpm": 0.22,
     "hrv_ms": 0.25,
@@ -46,7 +44,7 @@ HEALTH_RANGES = {
     "bmi": (18.5, 24.9)
 }
 
-# ---------- CORE ----------
+# Core
 def compute_physiology_score(features):
     total_w = 0.0
     score = 0.0
@@ -85,7 +83,7 @@ def run_feature_normalisation(save=True):
 
     phys_score, phys_breakdown = compute_physiology_score(features)
 
-    # FIXED: Extract metadata from features file
+    # Extract metadata from features file
     metadata = {
         "age": features.get("age"),
         "sex": features.get("sex"),
@@ -112,7 +110,7 @@ def run_feature_normalisation(save=True):
         ]).to_csv(out_risk, index=False)
         print(f"💾 Saved normalized physiology → {out_risk}")
 
-    # FIXED: Return both physiology score and metadata
+    # Return both physiology score and metadata
     return {
         "physiology_score": round(phys_score, 4),
         "breakdown": phys_breakdown,
