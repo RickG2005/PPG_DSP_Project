@@ -4,30 +4,29 @@ import os
 import time
 from datetime import datetime
 
-# ---------------------- CONFIG ----------------------
+
 PORT = "COM5"          # Adjust for your ESP32 port
 BAUD_RATE = 115200     # Must match Arduino Serial.begin(115200)
 RAW_PATH = r"C:\Users\rick2\Documents\PPG Project\data\raw"
 WARMUP_SECONDS = 3     # Skip initial unstable readings
 MIN_RECORDING_TIME = 30  # Minimum seconds for valid recording
-# ----------------------------------------------------
 
 def run_data_collection():
     """
     Phase 1: Collects PPG data from serial and saves it as CSV.
     Automatically uses user's name in the filename.
     """
-    # --- Ask for user name ---
+    # Ask for user name 
     user_name = input("\n👤 Enter participant name: ").strip().replace(" ", "_")
     if not user_name:
         user_name = "unknown_user"
 
-    # --- Prepare file path ---
+    # Prepare file path 
     os.makedirs(RAW_PATH, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = os.path.join(RAW_PATH, f"{user_name}_ppg_{timestamp}.csv")
 
-    # --- Serial connection ---
+    # Serial connection
     print(f"\n🔌 Connecting to {PORT} at {BAUD_RATE} baud...")
     try:
         ser = serial.Serial(PORT, BAUD_RATE, timeout=1)
@@ -37,14 +36,14 @@ def run_data_collection():
         print("💡 Tip: Check if Arduino IDE Serial Monitor is closed and PORT is correct.")
         return None
 
-    # --- Warmup period ---
+    # Warmup period 
     print(f"⏳ Warming up sensor for {WARMUP_SECONDS} seconds...")
     warmup_start = time.time()
     while time.time() - warmup_start < WARMUP_SECONDS:
         ser.readline()  # Discard warmup readings
     print("✅ Warmup complete. Starting data collection...\n")
 
-    # --- Start logging ---
+    # Start logging
     print(f"📄 Logging data to: {output_file}")
     print(f"⏱️  Minimum recording time: {MIN_RECORDING_TIME} seconds")
     print("🟢 Press Ctrl + C to stop recording.\n")
@@ -109,7 +108,7 @@ def run_data_collection():
     finally:
         ser.close()
 
-    # --- Summary ---
+    # Summary 
     elapsed = time.time() - start_time
     print(f"\n✅ Data saved successfully → {output_file}")
     print(f"📊 Total samples collected: {sample_count}")
@@ -123,8 +122,7 @@ def run_data_collection():
     
     return output_file  # Return path to main.py for next phase
 
-
-# ---------------------- MAIN ----------------------
+# Main
 if __name__ == "__main__":
     result = run_data_collection()
     if result:
