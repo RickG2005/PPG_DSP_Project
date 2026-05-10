@@ -4,26 +4,24 @@ import pandas as pd
 from scipy.signal import find_peaks
 import matplotlib.pyplot as plt
 
-# ---------- CONFIG ----------
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
 
 
-# ---------- BEAT DETECTION CORE ----------
 def detect_beats(ppg, fs=100, plot=False):
     """
     Detect systolic peaks and feet (valleys) in a PPG signal.
     Returns dictionary with indices, times, and beat count.
     """
-    # --- Normalize ---
+    # Normalize 
     ppg = (ppg - np.min(ppg)) / (np.max(ppg) - np.min(ppg))
     ppg = ppg - np.mean(ppg)
 
-    # --- Detect peaks ---
+    # Detect peaks 
     min_distance = int(0.4 * fs)  # Avoid >150 BPM
     prominence = 0.3 * np.std(ppg)
     peaks, _ = find_peaks(ppg, distance=min_distance, prominence=prominence)
 
-    # --- Detect valleys before peaks ---
+    # Detect valleys before peaks 
     valleys, _ = find_peaks(-ppg, distance=min_distance, prominence=prominence / 2)
     feet = []
     for p in peaks:
@@ -32,11 +30,11 @@ def detect_beats(ppg, fs=100, plot=False):
             feet.append(prior_feet[-1])
     feet = np.array(feet)
 
-    # --- Convert to time ---
+    # Convert to time
     foot_times = np.array(feet) / fs
     peak_times = np.array(peaks) / fs
 
-    # --- Plot ---
+    # Plot 
     if plot:
         plt.figure(figsize=(12, 4))
         plt.plot(ppg, color='black', linewidth=1.1, label="PPG (Normalized)")
@@ -59,7 +57,7 @@ def detect_beats(ppg, fs=100, plot=False):
     }
 
 
-# ---------- GET LATEST PROCESSED FILE ----------
+# Latest Processed File
 def get_latest_processed_file():
     csv_files = [f for f in os.listdir(PROCESSED_PATH) if f.endswith("_processed.csv")]
     if not csv_files:
@@ -69,7 +67,7 @@ def get_latest_processed_file():
     return latest_file
 
 
-# ---------- MAIN FUNCTION ----------
+# MAIN
 def run_latest_beat_detection(plot=True):
     """
     Load latest processed PPG data and run beat detection.
@@ -82,7 +80,7 @@ def run_latest_beat_detection(plot=True):
     print(f"\n📁 Latest Processed File: {os.path.basename(latest_file)}")
     df = pd.read_csv(latest_file)
 
-    # --- Auto detect sampling rate ---
+    # Auto detect sampling rate 
     if "timestamp_ms" in df.columns:
         timestamps = df["timestamp_ms"].to_numpy()
         if len(timestamps) > 1:
@@ -95,7 +93,7 @@ def run_latest_beat_detection(plot=True):
         fs = 100
     print(f"🕒 Sampling Rate: {fs:.2f} Hz")
 
-    # --- Verify input ---
+    # Verify input
     if "ir_filtered" not in df.columns:
         print("❌ 'ir_filtered' column missing. Run preprocess.py first.")
         return None
@@ -103,13 +101,13 @@ def run_latest_beat_detection(plot=True):
     ppg = df["ir_filtered"].to_numpy()
     print(f"📈 Loaded {len(ppg)} samples for beat detection")
 
-    # --- Run detection ---
+    # Run detection
     results = detect_beats(ppg, fs=fs, plot=plot)
     print(f"✅ Detected {results['beats_count']} beats")
 
     return results
 
 
-# ---------- RUN DIRECTLY ----------
+# Run Directly
 if __name__ == "__main__":
     run_latest_beat_detection(plot=True)
