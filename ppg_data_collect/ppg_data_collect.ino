@@ -12,8 +12,7 @@ void setup() {
     Serial.println("MAX30102 not found. Check wiring and power.");
     while (1);
   }
-
-  // --- CONFIGURATION ---
+  
   byte ledBrightness = 0x1F;   // IR LED brightness (31 = low)
   byte sampleAverage = 1;      // Use 1 for true 100 Hz timing (avoid extra averaging)
   byte ledMode = 2;            // 2 = IR + Red (you can still keep Red OFF)
@@ -21,7 +20,7 @@ void setup() {
   int pulseWidth = 411;        // Good balance between resolution and range
   int adcRange = 16384;        // Wider ADC range to prevent saturation
 
-  // --- Initialize the MAX30102 ---
+  // Initialize Sensor
   particleSensor.setup(
     ledBrightness,
     sampleAverage,
