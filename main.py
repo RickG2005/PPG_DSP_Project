@@ -4,7 +4,7 @@ import numpy as np
 from flask import Flask, render_template
 import pandas as pd
 
-# ---------------- PATH FIX ----------------
+
 BASE_DIR = os.path.dirname(__file__)
 DISPLAY_DIR = os.path.join(BASE_DIR, "display")
 TEMPLATES_DIR = os.path.join(DISPLAY_DIR, "templates")
@@ -13,10 +13,8 @@ SIGNAL_DIR = os.path.join(BASE_DIR, "signal_processing")
 RAW_PATH = os.path.join(BASE_DIR, "data", "raw")
 FINAL_PATH = os.path.join(BASE_DIR, "data", "final")
 
-# Add subfolders to Python's import path
 sys.path.extend([DATA_COLLECT_DIR, SIGNAL_DIR])
 
-# ---------------- IMPORTS ----------------
 import data_to_csv
 import preprocess
 import beat_detection
@@ -24,7 +22,7 @@ import feature_extraction
 import feature_normalisation
 import risk_model
 
-# ---------------- FLASK APP ----------------
+#Flask
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
 
 def get_latest_final_csv():
@@ -80,13 +78,13 @@ def index():
         metadata=metadata
     )
 
-# ---------------- PIPELINE ----------------
+# Pipeline
 def run_pipeline():
     print("\n" + "="*60)
     print("🩸 PPG DIABETES RISK ASSESSMENT PIPELINE")
     print("="*60 + "\n")
 
-    # --- Phase 1: Data Collection ---
+    # Data Collection
     print("-"*60)
     print("[1/6] COLLECTING PPG DATA FROM ESP32 SENSOR")
     print("-"*60)
@@ -96,14 +94,14 @@ def run_pipeline():
         return
     print(f"✅ Data collection complete → {raw_file}")
 
-    # --- Phase 2: Preprocessing ---
+    # Preprocessing 
     print("\n" + "-"*60)
     print("[2/6] PREPROCESSING RAW SIGNAL")
     print("-"*60)
     processed_file = preprocess.run_preprocessing(raw_file)
     print(f"✅ Preprocessed data saved → {processed_file}")
 
-    # --- Phase 3: Beat Detection ---
+    # Beat Detection 
     print("\n" + "-"*60)
     print("[3/6] DETECTING HEARTBEATS")
     print("-"*60)
@@ -113,7 +111,7 @@ def run_pipeline():
         return
     print("✅ Beat detection completed.")
 
-    # --- Phase 4: Feature Extraction ---
+    # Phase 4: Feature Extraction 
     print("\n" + "-"*60)
     print("[4/6] EXTRACTING FEATURES & COLLECTING METADATA")
     print("-"*60)
@@ -123,7 +121,7 @@ def run_pipeline():
         return
     print(f"✅ Feature extraction complete → {features_file}")
 
-    # --- Phase 5: Feature Normalisation ---
+    # Phase 5: Feature Normalisation 
     print("\n" + "-"*60)
     print("[5/6] NORMALISING PHYSIOLOGICAL FEATURES")
     print("-"*60)
@@ -138,7 +136,7 @@ def run_pipeline():
     print("✅ Features normalised successfully.")
     print(f"   Physiology Score: {physiology_score:.4f}")
 
-    # --- Phase 6: Risk Assessment ---
+    # Phase 6: Risk Assessment 
     print("\n" + "-"*60)
     print("[6/6] COMPUTING DIABETES RISK")
     print("-"*60)
@@ -171,10 +169,10 @@ def run_pipeline():
     print("✅ Pipeline complete!\n")
 
 if __name__ == "__main__":
-    # Step 1: Run the CLI pipeline
+    # Run the CLI pipeline
     run_pipeline()
 
-    # Step 2: Ask user if they want to see the web page
+    # Ask user if they want to see the web page
     choice = input("\n🌐 Open web page with latest report? (y/n): ").strip().lower()
     if choice in ("y", "yes"):
         print("🚀 Starting Flask web server at http://127.0.0.1:5000 ...")
