@@ -5,13 +5,12 @@ from scipy.signal import butter, filtfilt
 import re
 import matplotlib.pyplot as plt
 
-# ---------- CONFIG ----------
 RAW_PATH = r"C:\Users\rick2\Documents\PPG Project\data\raw"
 PROCESSED_PATH = r"C:\Users\rick2\Documents\PPG Project\data\processed"
 DEFAULT_FS = 100  # Default fallback sampling frequency
 
 
-# ---------- CLEAN RAW CSV ----------
+# Clean raw CSV 
 def load_and_clean_csv(file_path):
     clean_rows = []
     with open(file_path, "r") as f:
@@ -34,7 +33,7 @@ def load_and_clean_csv(file_path):
     return df
 
 
-# ---------- FILTER ----------
+# FIltering
 def butter_bandpass_filter(signal, lowcut, highcut, fs, order=2):
     nyquist = 0.5 * fs
     low = lowcut / nyquist
@@ -43,7 +42,7 @@ def butter_bandpass_filter(signal, lowcut, highcut, fs, order=2):
     return filtfilt(b, a, signal)
 
 
-# ---------- AUTO CALIBRATION ----------
+# Auto Calibration
 def auto_calibrate(signal):
     """Normalize & center PPG data with outlier clipping."""
     lower, upper = np.percentile(signal, [1, 99])
@@ -57,7 +56,7 @@ def auto_calibrate(signal):
     return signal_normalized
 
 
-# ---------- MAIN PREPROCESS FUNCTION ----------
+# Main Preprocess
 def run_preprocessing(input_file=None):
     """
     Phase 2: Preprocess PPG data.
@@ -76,37 +75,37 @@ def run_preprocessing(input_file=None):
     else:
         print(f"📥 Using input file: {os.path.basename(input_file)}")
 
-    # --- Load and clean ---
+    # Load and clean
     df = load_and_clean_csv(input_file)
     ir_signal = df["ir_value"].to_numpy()
 
-    # --- Estimate Sampling Rate ---
+    # Estimate Sampling Rate 
     time_diff = np.diff(df["timestamp_ms"]) / 1000.0
     valid_diffs = time_diff[time_diff < np.percentile(time_diff, 95)]
     estimated_fs = round(1 / np.mean(valid_diffs)) if len(valid_diffs) > 0 else DEFAULT_FS
     print(f"🕒 Estimated Sampling Rate: {estimated_fs} Hz")
 
-    # --- Remove startup samples ---
+    # Remove startup samples
     skip_samples = int(estimated_fs * 2)
     if len(ir_signal) > skip_samples:
         ir_signal = ir_signal[skip_samples:]
         df = df.iloc[skip_samples:].reset_index(drop=True)
 
-    # --- Calibrate and Filter ---
+    # Calibrate and Filter 
     ir_calibrated = auto_calibrate(ir_signal)
     lowcut = 0.5
     highcut = 4.0 if estimated_fs >= 50 else min(estimated_fs / 4, 3.0)
     order = 2 if len(ir_calibrated) < 500 else 3
     filtered = butter_bandpass_filter(ir_calibrated, lowcut, highcut, fs=estimated_fs, order=order)
 
-    # --- Save processed CSV ---
+    # Save processed CSV 
     os.makedirs(PROCESSED_PATH, exist_ok=True)
     output_file = os.path.join(PROCESSED_PATH, os.path.basename(input_file).replace(".csv", "_processed.csv"))
     df["ir_filtered"] = filtered
     df.to_csv(output_file, index=False)
     print(f"💾 Saved processed CSV: {output_file}")
 
-    # --- Plot Preview ---
+    # Plot Preview 
     plt.figure(figsize=(12, 4))
     plt.plot(ir_calibrated, label="Auto-Calibrated IR", color='gray', alpha=0.6)
     plt.plot(filtered, label="Filtered IR", color='blue', linewidth=1.5)
@@ -121,6 +120,6 @@ def run_preprocessing(input_file=None):
     return output_file
 
 
-# ---------- RUN DIRECTLY ----------
+# Run Directly
 if __name__ == "__main__":
     run_preprocessing()
